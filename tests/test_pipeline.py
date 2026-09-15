@@ -24,6 +24,16 @@ def test_loader_sorts_and_averages_duplicate_timestamps(tmp_path):
     assert loaded.iloc[-1][TARGET_COLUMN] == 13
 
 
+def test_loader_materializes_missing_clock_hours(tmp_path):
+    source = tmp_path / "pjme.csv"
+    source.write_text(
+        "Datetime,PJME_MW\n2024-01-01 00:00:00,10\n2024-01-01 02:00:00,14\n"
+    )
+    loaded = load_pjme_csv(source)
+    assert len(loaded) == 3
+    assert pd.isna(loaded.loc["2024-01-01 01:00:00", TARGET_COLUMN])
+
+
 def test_features_use_only_prior_consumption():
     frame = hourly_frame(200)
     featured = build_features(frame, lags=(1, 24), rolling_windows=(24,))

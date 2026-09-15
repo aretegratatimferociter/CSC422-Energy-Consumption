@@ -36,4 +36,8 @@ def load_pjme_csv(path: str | Path) -> pd.DataFrame:
         raise ValueError("No valid timestamped observations were found")
     if not frame.index.is_monotonic_increasing:
         raise ValueError("Timestamps must be in chronological order")
-    return frame
+
+    # Materialize absent clock hours so a 24-row lag always means 24 clock hours.
+    # Missing targets stay null and are removed only after features are calculated.
+    complete_index = pd.date_range(frame.index.min(), frame.index.max(), freq="h")
+    return frame.reindex(complete_index).rename_axis(TIMESTAMP_COLUMN)
