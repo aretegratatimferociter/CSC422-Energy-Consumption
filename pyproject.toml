@@ -23,6 +23,7 @@ dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.scripts]
 energy-forecast = "energy_forecasting.cli:main"
+energy-preprocess = "energy_forecasting.preprocess:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

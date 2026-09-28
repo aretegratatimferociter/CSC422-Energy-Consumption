@@ -1,7 +1,15 @@
 import numpy as np
 import pandas as pd
 
-from energy_forecasting.data import TARGET_COLUMN, load_pjme_csv
+from energy_forecasting.data import (
+    IMPUTED_COLUMN,
+    OUTLIER_COLUMN,
+    TARGET_COLUMN,
+    TIMESTAMP_COLUMN,
+    load_pjme_csv,
+    preprocess_pjme_csv,
+    preprocess_pjme_frame,
+)
 from energy_forecasting.evaluation import chronological_split, regression_metrics
 from energy_forecasting.features import build_features
 from energy_forecasting.modeling import evaluate_models
@@ -31,7 +39,56 @@ def test_loader_materializes_missing_clock_hours(tmp_path):
     )
     loaded = load_pjme_csv(source)
     assert len(loaded) == 3
-    assert pd.isna(loaded.loc["2024-01-01 01:00:00", TARGET_COLUMN])
+    assert loaded.loc["2024-01-01 01:00:00", TARGET_COLUMN] == 10
+
+
+def test_preprocessing_is_auditable_and_causal():
+    source = pd.DataFrame(
+        {
+            TIMESTAMP_COLUMN: [
+                "2024-01-01 00:00:00",
+                "2024-01-01 01:00:00",
+                "2024-01-01 01:00:00",
+                "2024-01-01 03:00:00",
+            ],
+            TARGET_COLUMN: [10, 12, 14, 16],
+        }
+    )
+    cleaned, report = preprocess_pjme_frame(source)
+    assert cleaned.loc["2024-01-01 01:00:00", TARGET_COLUMN] == 13
+    assert cleaned.loc["2024-01-01 02:00:00", TARGET_COLUMN] == 13
+    assert bool(cleaned.loc["2024-01-01 02:00:00", IMPUTED_COLUMN])
+    assert not bool(cleaned.loc["2024-01-01 03:00:00", OUTLIER_COLUMN])
+    assert report.duplicate_rows_resolved == 1
+    assert report.missing_hours_added == 1
+    assert report.imputed_rows == 1
+
+
+def test_preprocessing_writes_clean_data_and_report(tmp_path):
+    source = tmp_path / "raw.csv"
+    output = tmp_path / "clean.csv"
+    report_path = tmp_path / "report.json"
+    source.write_text(
+        "Datetime,PJME_MW\n2024-01-01 00:00:00,10\n2024-01-01 02:00:00,14\n"
+    )
+    report = preprocess_pjme_csv(source, output, report_path)
+    written = pd.read_csv(output)
+    assert list(written.columns) == [TIMESTAMP_COLUMN, TARGET_COLUMN, IMPUTED_COLUMN, OUTLIER_COLUMN]
+    assert written[TARGET_COLUMN].isna().sum() == 0
+    assert report_path.exists()
+    assert report.output_rows == 3
+
+
+def test_preprocessing_fills_consecutive_gaps_from_history():
+    source = pd.DataFrame(
+        {
+            TIMESTAMP_COLUMN: ["2024-01-01 00:00:00", "2024-01-01 03:00:00"],
+            TARGET_COLUMN: [10, 16],
+        }
+    )
+    cleaned, report = preprocess_pjme_frame(source)
+    assert cleaned[TARGET_COLUMN].tolist() == [10, 10, 10, 16]
+    assert report.imputed_rows == 2
 
 
 def test_features_use_only_prior_consumption():

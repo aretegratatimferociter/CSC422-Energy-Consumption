@@ -16,5 +16,7 @@ reports/*.csv
 !data/raw/.gitkeep
 !data/raw/PJME_hourly.csv
 !data/processed/.gitkeep
+!data/processed/PJME_hourly_clean.csv
+!data/processed/data_quality_report.json
 !models/.gitkeep
 !reports/figures/.gitkeep

@@ -1,0 +1,18 @@
+{
+  "source_rows": 145366,
+  "output_rows": 145392,
+  "invalid_timestamp_rows": 0,
+  "invalid_target_rows": 0,
+  "non_positive_target_rows": 0,
+  "duplicate_rows_resolved": 4,
+  "missing_hours_added": 30,
+  "imputed_rows": 30,
+  "statistical_outlier_rows": 27,
+  "start_timestamp": "2002-01-01T01:00:00",
+  "end_timestamp": "2018-08-03T00:00:00",
+  "cleaning_policy": {
+    "duplicates": "average values sharing the same timestamp",
+    "missing_or_invalid_targets": "fill from 168h lag, then 24h lag, then prior hour",
+    "outliers": "flag values outside 3 IQR; retain for modeling"
+  }
+}
