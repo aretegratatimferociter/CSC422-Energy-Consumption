@@ -175,12 +175,14 @@ better than any single city in both summer and winter.
 - `data/processed/weather_quality_report.json`: counts of rejected readings and filled hours
   per city, the population snapshots, and the rules used.
 
-## Still to decide
+## Modeling integration
 
-- **Forecast horizon:** whether we predict the next hour, the next day, or both. Every feature
-  must be shifted so the model only sees data available when the forecast is made.
-- **Current-hour weather:** whether the model may use the actual temperature for the hour being
-  predicted (a stand-in for a weather forecast) or only past weather.
-- **Adding to the model:** the weather features are not yet part of the modeling pipeline.
-- **Next features:** a similar trend and variability measure for energy use, and a comparison
-  with the same period in the previous year.
+The modeling pipeline includes the 12 weather window features by default. Each feature is shifted
+one hour, so the prediction for hour `t` uses weather through hour `t - 1`. This matches the
+current one-hour-ahead interpretation and avoids substituting observed current-hour weather for a
+weather forecast. Use `energy-forecast --no-weather` for the energy-only comparison.
+
+The team still needs to decide whether to add separate next-day forecasts. That horizon would
+require weather forecasts or a longer weather lag rather than observed future conditions. A
+similar trend and variability measure for energy use and a previous-year comparison also remain
+possible extensions.
