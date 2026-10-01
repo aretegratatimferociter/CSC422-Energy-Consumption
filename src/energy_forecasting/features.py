@@ -1,20 +1,65 @@
 """Leakage-safe feature engineering for hourly forecasts."""
 
 from collections.abc import Iterable
+from pathlib import Path
 
 import pandas as pd
 from pandas.tseries.holiday import USFederalHolidayCalendar
 
-from energy_forecasting.data import TARGET_COLUMN
+from energy_forecasting.data import TARGET_COLUMN, TIMESTAMP_COLUMN
 
 DEFAULT_LAGS = (1, 24, 168)
 DEFAULT_ROLLING_WINDOWS = (24, 168)
+
+# Population-weighted weather window features produced by `energy-weather`.
+# Author: plholt3
+WEATHER_FEATURES = tuple(
+    f"{measure}_{window}"
+    for window in ("24h", "16d", "96d")
+    for measure in ("hdh_wma", "cdh_wma", "dh_std", "dh_slope")
+)
+# Weather is shifted by this many hours so a row never sees the weather of the hour it predicts.
+# Author: plholt3
+DEFAULT_WEATHER_LAG = 1
+
+
+def load_weather_features(path: str | Path) -> pd.DataFrame:
+    """Read the weather window features from the CSV written by ``energy-weather``.
+
+    Author: plholt3
+    """
+    weather = pd.read_csv(path, index_col=TIMESTAMP_COLUMN, parse_dates=True)
+    missing = set(WEATHER_FEATURES) - set(weather.columns)
+    if missing:
+        raise ValueError(f"Weather file is missing columns: {sorted(missing)}")
+    return weather[list(WEATHER_FEATURES)]
+
+
+def add_weather_features(
+    frame: pd.DataFrame, weather: pd.DataFrame, lag: int = DEFAULT_WEATHER_LAG
+) -> pd.DataFrame:
+    """Join weather features shifted back ``lag`` hours onto an hourly frame.
+
+    Each weather feature is computed as of its own hour, so shifting by at least one hour means
+    the row for hour t only sees weather through hour t - lag.
+
+    Author: plholt3
+    """
+    if lag < 1:
+        raise ValueError("Weather lag must be at least one hour")
+    uncovered = frame.index.difference(weather.index)
+    if len(uncovered):
+        raise ValueError(f"Weather features are missing {len(uncovered)} hours, e.g. {uncovered[0]}")
+    lagged = weather.shift(lag, freq="h").reindex(frame.index)
+    return frame.join(lagged)
 
 
 def build_features(
     frame: pd.DataFrame,
     lags: Iterable[int] = DEFAULT_LAGS,
     rolling_windows: Iterable[int] = DEFAULT_ROLLING_WINDOWS,
+    weather: pd.DataFrame | None = None,
+    weather_lag: int = DEFAULT_WEATHER_LAG,
 ) -> pd.DataFrame:
     """Add calendar, holiday, lag, and trailing-average features.
 
@@ -49,6 +94,10 @@ def build_features(
         if window < 1:
             raise ValueError("Rolling windows must be positive")
         result[f"rolling_mean_{window}"] = history.rolling(window=window).mean()
+
+    # Optional weather window features, lagged to avoid leakage. Author: plholt3
+    if weather is not None:
+        result = add_weather_features(result, weather, weather_lag)
 
     return result.dropna()
 

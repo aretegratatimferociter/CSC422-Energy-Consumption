@@ -15,6 +15,9 @@ reports/figures/*
 reports/*.csv
 !data/raw/.gitkeep
 !data/raw/PJME_hourly.csv
+# Raw weather and population data are committed. Author: plholt3
+!data/raw/weather/
+!data/raw/population/
 !data/processed/.gitkeep
 !data/processed/PJME_hourly_clean.csv
 !data/processed/data_quality_report.json
