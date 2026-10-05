@@ -32,6 +32,12 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def finish_plot(name: str) -> None:
+    """
+    Closes all plots
+
+    Args:
+        name (str): the name of the file
+    """
     plt.tight_layout()
     plt.savefig(OUT_DIR / f"{name}.png", dpi=150)
  
@@ -192,15 +198,19 @@ def weekday_weekend_analysis(d: pd.DataFrame) -> None:
 
 
 def run_eda(df: pd.DataFrame) -> None:
+    """
+    runs all eda analysis
+
+    Args:
+        df (pd.DataFrame): the given data file
+    """
     d = add_calendar(df)
     plot_temporal_patterns(d)
     plot_dow_hour_heatmap(d)
     weekday_weekend_analysis(d)
 
 
-# --------------------------------------------------------------------------
-# PCA
-# --------------------------------------------------------------------------
+
 def build_daily_matrix(df: pd.DataFrame):
     """
     Builds a matrix that is a hourly representation of a day
@@ -266,7 +276,7 @@ def plot_scree(pca: PCA, k: int) -> None:
     evr = pca.explained_variance_ratio_[:12]
     cum = np.cumsum(pca.explained_variance_ratio_)[:12]
     x = np.arange(1, len(evr) + 1)
-    fig, ax = plt.subplots(figsize=(8, 4.5))
+    _, ax = plt.subplots(figsize=(8, 4.5))
     ax.bar(x, evr, alpha=0.7, label="Individual")
     ax.plot(x, cum, "o-", color="crimson", label="Cumulative")
     ax.axhline(VARIANCE_TARGET, ls="--", color="gray")
@@ -279,7 +289,7 @@ def plot_scree(pca: PCA, k: int) -> None:
 
 def plot_loadings(loadings: pd.DataFrame, n: int = 4) -> None:
     cols = loadings.columns[:n]
-    fig, ax = plt.subplots(figsize=(9, 4.5))
+    _, ax = plt.subplots(figsize=(9, 4.5))
     for c in cols:
         ax.plot(range(24), loadings[c].values, marker="o", ms=3, label=c)
     ax.axhline(0, color="k", lw=0.6)
@@ -288,7 +298,7 @@ def plot_loadings(loadings: pd.DataFrame, n: int = 4) -> None:
     ax.legend()
     finish_plot("02_loadings_lines")
 
-    fig, ax = plt.subplots(figsize=(7, 8))
+    _, ax = plt.subplots(figsize=(7, 8))
     sns.heatmap(loadings[cols], cmap="RdBu_r", center=0, annot=True, fmt=".2f",
                 cbar_kws={"label": "Loading"}, ax=ax)
     ax.set_title("Loadings heatmap")
@@ -296,7 +306,7 @@ def plot_loadings(loadings: pd.DataFrame, n: int = 4) -> None:
 
 
 def plot_scores(scores: pd.DataFrame, meta: pd.DataFrame) -> None:
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
+    _, axes = plt.subplots(1, 2, figsize=(14, 5.5))
     sns.scatterplot(x=scores["PC1"], y=scores["PC2"], hue=meta["season"],
                     s=12, alpha=0.6, ax=axes[0])
     axes[0].set_title("Day scores by season")
@@ -305,7 +315,7 @@ def plot_scores(scores: pd.DataFrame, meta: pd.DataFrame) -> None:
     axes[1].set_title("Day scores by weekend")
     finish_plot("04_score_scatter")
 
-    fig, axes = plt.subplots(3, 1, figsize=(13, 8), sharex=True)
+    _, axes = plt.subplots(3, 1, figsize=(13, 8), sharex=True)
     for ax, pc in zip(axes, ["PC1", "PC2", "PC3"]):
         ax.plot(scores.index, scores[pc], lw=0.4, alpha=0.6)
         ax.plot(scores.index, scores[pc].rolling(30, center=True).mean(),
