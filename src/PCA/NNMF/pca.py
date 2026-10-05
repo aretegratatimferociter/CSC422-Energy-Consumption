@@ -1,14 +1,12 @@
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy import stats
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-
-
 
 CSV_PATH = "../../../data/processed/PJME_hourly_clean.csv"   #The path
 OUT_DIR = Path("../../../reports")
@@ -90,7 +88,7 @@ def plot_temporal_patterns(d: pd.DataFrame) -> None:
     daily["dow"] = daily.index.dayofweek
     daily["month"] = daily.index.month
 
-    fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+    _, axes = plt.subplots(2, 2, figsize=(14, 9))
 
     # Hourly: mean +/- 1 SD across all days
     sns.lineplot(data=d, x="hour", y=VALUE_COL, errorbar="sd", marker="o", ax=axes[0, 0])
@@ -117,7 +115,7 @@ def plot_temporal_patterns(d: pd.DataFrame) -> None:
     finish_plot("eda_01_hourly_daily_monthly")
 
     # Weekly and monthly time series over the full record
-    fig, axes = plt.subplots(2, 1, figsize=(13, 7), sharex=True)
+    _, axes = plt.subplots(2, 1, figsize=(13, 7), sharex=True)
     d[VALUE_COL].resample("W").mean().plot(ax=axes[0], lw=0.8)
     axes[0].set(title="Weekly mean load", ylabel="MW", xlabel="")
     d[VALUE_COL].resample("MS").mean().plot(ax=axes[1], lw=1.2, color="crimson")
@@ -128,7 +126,7 @@ def plot_temporal_patterns(d: pd.DataFrame) -> None:
 def plot_dow_hour_heatmap(d: pd.DataFrame) -> None:
     hm = d.pivot_table(index="dow", columns="hour", values=VALUE_COL, aggfunc="mean")
     hm.index = DAY_NAMES
-    fig, ax = plt.subplots(figsize=(13, 4.5))
+    _, ax = plt.subplots(figsize=(13, 4.5))
     sns.heatmap(hm, cmap="YlOrRd", cbar_kws={"label": "Mean MW"}, ax=ax)
     ax.set(title="Mean load: day of week × hour of day", xlabel="Hour", ylabel="")
     finish_plot("eda_03_dow_hour_heatmap")
@@ -137,7 +135,7 @@ def plot_dow_hour_heatmap(d: pd.DataFrame) -> None:
 
 def weekday_weekend_analysis(d: pd.DataFrame) -> None:
     # Overall hourly profiles + weekday-weekend gap by season
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    _, axes = plt.subplots(1, 2, figsize=(14, 5))
     sns.lineplot(data=d, x="hour", y=VALUE_COL, hue="day_type", errorbar="sd",
                  marker="o", ax=axes[0])
     axes[0].set(title="Hourly profile: weekday vs weekend", xlabel="Hour of day",
