@@ -15,6 +15,7 @@ shared, leakage-safe feature pipeline.
 - Preserves chronological order when creating train and test periods.
 - Evaluates persistence, 24-hour moving average, decision tree, and random forest forecasts.
 - Reports MAE, RMSE, and MAPE and exports predictions and feature importances.
+- Runs exploratory analysis and PCA on complete daily load profiles.
 - Includes automated tests and GitHub Actions continuous integration.
 
 ## Project layout
@@ -28,6 +29,7 @@ docs/                      method documentation
 models/                    trained models (not committed)
 notebooks/                 exploratory analyses
 reports/figures/           generated figures (not committed)
+reports/pca/               generated EDA/PCA figures and tables (not committed)
 src/energy_forecasting/    reusable data and modeling pipeline
 tests/                     automated tests
 ```
@@ -114,6 +116,18 @@ Run the quality checks with:
 ruff check .
 pytest
 ```
+
+## Run exploratory analysis and PCA
+
+From the repository root, run:
+
+```bash
+python src/PCA/NNMF/pca.py
+```
+
+The script groups the hourly series into complete 24-hour daily profiles, standardizes each hour,
+and calculates principal components explaining at least 95% of the variance. It also produces
+hourly, weekday/weekend, seasonal, loading, and score visualizations under `reports/pca/`.
 
 ## Modeling rules
 
