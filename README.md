@@ -15,7 +15,7 @@ shared, leakage-safe feature pipeline.
 - Preserves chronological order when creating train and test periods.
 - Evaluates persistence, 24-hour moving average, decision tree, and random forest forecasts.
 - Reports MAE, RMSE, and MAPE and exports predictions and feature importances.
-- Runs exploratory analysis and PCA on complete daily load profiles.
+- Runs exploratory analysis, PCA, and NNMF on complete daily load profiles.
 - Includes automated tests and GitHub Actions continuous integration.
 
 ## Project layout
@@ -30,6 +30,7 @@ models/                    trained models (not committed)
 notebooks/                 exploratory analyses
 reports/figures/           generated figures (not committed)
 reports/pca/               generated EDA/PCA figures and tables (not committed)
+reports/nnmf/                generated NNMF figures and tables (not committed)
 src/energy_forecasting/    reusable data and modeling pipeline
 tests/                     automated tests
 ```
@@ -122,12 +123,32 @@ pytest
 From the repository root, run:
 
 ```bash
-python src/PCA/NNMF/pca.py
+python src/PCA/pca.py
 ```
 
 The script groups the hourly series into complete 24-hour daily profiles, standardizes each hour,
 and calculates principal components explaining at least 95% of the variance. It also produces
 hourly, weekday/weekend, seasonal, loading, and score visualizations under `reports/pca/`.
+
+## Run NNMF
+
+From the repository root, run:
+
+```bash
+python src/NNMF/nnmf.py
+```
+
+The NNMF script groups the hourly series into complete 24-hour daily profiles and fits
+nonnegative factors to the raw MW values. It selects the smallest number of factors reaching 95%
+reconstruction quality, defined as
+
+`1 - ||X - WH||² / ||X - mean(X)||²`.
+
+If no rank through 24 reaches the target, it reports a warning and uses the rank with the best
+reconstruction quality.
+
+Figures and tables are written under `reports/nnmf/`, including factor activations, hourly
+component profiles, rank-selection metrics, and metadata.
 
 ## Modeling rules
 

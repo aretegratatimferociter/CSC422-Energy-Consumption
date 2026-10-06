@@ -8,7 +8,7 @@ from scipy import stats
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 CSV_PATH = REPO_ROOT / "data" / "processed" / "PJME_hourly_clean.csv"
 OUT_DIR = REPO_ROOT / "reports" / "pca"
 VALUE_COL = "PJME_MW"
