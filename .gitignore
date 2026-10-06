@@ -12,6 +12,7 @@ data/raw/*
 data/processed/*
 models/*
 reports/figures/*
+reports/pca/
 reports/*.csv
 !data/raw/.gitkeep
 !data/raw/PJME_hourly.csv

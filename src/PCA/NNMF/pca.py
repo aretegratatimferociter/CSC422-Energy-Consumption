@@ -8,8 +8,9 @@ from scipy import stats
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
-CSV_PATH = "../../../data/processed/PJME_hourly_clean.csv"   #The path
-OUT_DIR = Path("../../../reports")
+REPO_ROOT = Path(__file__).resolve().parents[3]
+CSV_PATH = REPO_ROOT / "data" / "processed" / "PJME_hourly_clean.csv"
+OUT_DIR = REPO_ROOT / "reports" / "pca"
 VALUE_COL = "PJME_MW"
 PROGRESS_FLAGS = True
 STANDARDIZE = True           # True = z-score each hour column (correlation PCA); False = center only
@@ -42,7 +43,7 @@ def finish_plot(name: str) -> None:
     plt.close("all")
 
 
-def load_data(path: str) -> pd.DataFrame:
+def load_data(path: str | Path) -> pd.DataFrame:
     """
     Loads the given data from the path
 
