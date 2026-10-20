@@ -147,8 +147,17 @@ reconstruction quality, defined as
 If no rank through 24 reaches the target, it reports a warning and uses the rank with the best
 reconstruction quality.
 
-Figures and tables are written under `reports/nnmf/`, including factor activations, hourly
-component profiles, rank-selection metrics, and metadata.
+Figures and tables are written under `reports/nnmf/`, including:
+
+- a scree-style rank plot showing reconstruction quality and reconstruction error;
+- factor activation plots and hourly factor loadings (line and heatmap views);
+- a top-factor summary ranked by mean activation, with each factor profile and its three
+  highest-activation representative days; and
+- CSV tables containing factor activations, component profiles, rank-selection metrics, and
+  metadata.
+
+These visualizations are descriptive analysis only and are not connected to the forecasting
+models.
 
 ## Modeling rules
 

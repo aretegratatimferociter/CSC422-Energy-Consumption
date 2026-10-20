@@ -142,16 +142,29 @@ def fit_nnmf(
 
 
 def plot_rank_metrics(metrics: pd.DataFrame, rank: int) -> None:
-    _, ax = plt.subplots(figsize=(8, 4.5))
-    ax.plot(metrics["rank"], metrics["reconstruction_quality"], "o-", color="steelblue")
-    ax.axhline(RECONSTRUCTION_TARGET, ls="--", color="gray")
-    ax.axvline(rank, ls=":", color="crimson")
-    ax.set(
+    _, ax_quality = plt.subplots(figsize=(8, 4.5))
+    ax_error = ax_quality.twinx()
+    quality_line = ax_quality.plot(
+        metrics["rank"], metrics["reconstruction_quality"], "o-",
+        color="steelblue", label="Reconstruction quality",
+    )
+    error_line = ax_error.plot(
+        metrics["rank"], metrics["reconstruction_error"], "s--",
+        color="darkorange", label="Reconstruction error",
+    )
+    ax_quality.axhline(
+        RECONSTRUCTION_TARGET, ls=":", color="gray", label="Target quality",
+    )
+    ax_quality.axvline(rank, ls="-.", color="crimson", label=f"Selected rank (k={rank})")
+    ax_quality.set(
         xlabel="Number of factors",
         ylabel="Reconstruction quality",
-        title=f"NNMF rank selection (k={rank})",
+        title=f"NNMF scree plot (selected rank k={rank})",
     )
-    ax.set_xticks(metrics["rank"])
+    ax_error.set_ylabel("Reconstruction error")
+    ax_quality.set_xticks(metrics["rank"])
+    lines = quality_line + error_line + ax_quality.lines[-2:]
+    ax_quality.legend(lines, [line.get_label() for line in lines], loc="center right")
     finish_plot("01_rank_selection")
 
 
@@ -173,6 +186,50 @@ def plot_components(components: pd.DataFrame) -> None:
     sns.heatmap(components, cmap="YlOrRd", ax=ax, cbar_kws={"label": "Component weight (MW)"})
     ax.set(title="NNMF component profiles by hour", xlabel="Factor", ylabel="Hour")
     finish_plot("03_components_heatmap")
+
+
+def plot_top_factors(
+    scores: pd.DataFrame,
+    components: pd.DataFrame,
+    matrix: pd.DataFrame,
+    top_n: int = 3,
+    representative_days: int = 3,
+) -> None:
+    ranked = scores.mean().sort_values(ascending=False).head(top_n)
+    n_factors = len(ranked)
+    _, axes = plt.subplots(
+        n_factors, 2, figsize=(14, 4 * n_factors),
+        squeeze=False, gridspec_kw={"width_ratios": [1, 1.4]},
+    )
+    hours = range(len(components))
+
+    for row, factor in enumerate(ranked.index):
+        factor_scores = scores[factor]
+        selected_dates = factor_scores.nlargest(representative_days).index
+        profile_ax, dates_ax = axes[row]
+
+        profile_ax.plot(hours, components[factor], marker="o", ms=3, color="steelblue")
+        profile_ax.set(
+            title=f"{factor} profile (mean activation {ranked[factor]:.1f})",
+            xlabel="Hour of day",
+            ylabel="Component weight (MW)",
+            xticks=range(0, 24, 2),
+        )
+
+        for date in selected_dates:
+            dates_ax.plot(
+                hours, matrix.loc[date].to_numpy(), lw=1.5,
+                label=f"{date:%Y-%m-%d} (activation {factor_scores.loc[date]:.1f})",
+            )
+        dates_ax.set(
+            title=f"{factor} representative days",
+            xlabel="Hour of day",
+            ylabel="Load (MW)",
+            xticks=range(0, 24, 2),
+        )
+        dates_ax.legend(fontsize="small")
+
+    finish_plot("06_top_factors")
 
 
 def plot_scores(scores: pd.DataFrame, meta: pd.DataFrame) -> None:
@@ -216,6 +273,7 @@ def main() -> None:
     _, rank, scores, components, metrics = fit_nnmf(X)
     plot_rank_metrics(metrics, rank)
     plot_components(components)
+    plot_top_factors(scores, components, X)
     plot_scores(scores, meta)
 
     scores.join(meta).to_csv(OUT_DIR / "nnmf_scores.csv")
