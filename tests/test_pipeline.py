@@ -12,7 +12,7 @@ from energy_forecasting.data import (
 )
 from energy_forecasting.evaluation import chronological_split, regression_metrics
 from energy_forecasting.features import build_features
-from energy_forecasting.modeling import evaluate_models
+from energy_forecasting.modeling import candidate_models, evaluate_models, tune_models_time_series
 
 
 def hourly_frame(periods: int = 500) -> pd.DataFrame:
@@ -125,3 +125,37 @@ def test_all_models_run_on_shared_features():
         "random_forest",
     }
     assert all(len(result.predictions) == len(test) for result in results)
+
+
+def test_tuning_uses_expanding_time_series_folds():
+    frame = build_features(hourly_frame(700))
+    candidates = {
+        "decision_tree": [
+            {"max_depth": 4, "min_samples_leaf": 2},
+            {"max_depth": 8, "min_samples_leaf": 2},
+        ],
+        "random_forest": [
+            {
+                "n_estimators": 5,
+                "max_depth": 6,
+                "min_samples_leaf": 2,
+                "max_features": 1.0,
+            }
+        ],
+    }
+    selected, scores = tune_models_time_series(frame, n_splits=2, candidates=candidates)
+    assert set(selected) == {"decision_tree", "random_forest"}
+    assert len(scores) == 6
+    assert scores["selected"].any()
+    assert (scores["validation_start"] > frame.index.min()).all()
+
+
+def test_custom_model_parameters_are_applied():
+    models = candidate_models(
+        parameters={
+            "decision_tree": {"max_depth": 3},
+            "random_forest": {"n_estimators": 7},
+        }
+    )
+    assert models["decision_tree"].max_depth == 3
+    assert models["random_forest"].n_estimators == 7
