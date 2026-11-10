@@ -139,7 +139,9 @@ python src/NNMF/nnmf.py
 ```
 
 The NNMF script groups the hourly series into complete 24-hour daily profiles and fits
-nonnegative factors to the raw MW values. It selects the smallest number of factors reaching 95%
+nonnegative factors after min-max normalization to [0, 1]. Reconstruction quality is evaluated
+after converting the fitted output back to MW, and the component profiles are reported as MW
+contributions above the dataset minimum. It selects the smallest number of factors reaching 95%
 reconstruction quality, defined as
 
 `1 - ||X - WH||² / ||X - mean(X)||²`.

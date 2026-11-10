@@ -92,6 +92,11 @@ def fit_nnmf(
         raise ValueError("NNMF input must contain only finite values.")
     if (values < 0).any():
         raise ValueError("NNMF input must be nonnegative.")
+    data_min = values.min()
+    data_range = values.max() - data_min
+    if data_range == 0:
+        raise ValueError("NNMF input must contain variation.")
+    normalized_values = (values - data_min) / data_range
 
     metrics: list[dict[str, float | int]] = []
     selected: tuple[NMF, int, float] | None = None
@@ -102,13 +107,14 @@ def fit_nnmf(
             random_state=RANDOM_STATE,
             max_iter=MAX_ITER,
         )
-        scores = model.fit_transform(values)
-        reconstruction = model.inverse_transform(scores)
+        scores = model.fit_transform(normalized_values)
+        reconstruction = data_min + data_range * model.inverse_transform(scores)
         quality = reconstruction_quality(values, reconstruction)
         metrics.append({
             "rank": rank,
-            "reconstruction_error": float(model.reconstruction_err_),
+            "reconstruction_error": float(model.reconstruction_err_ * data_range),
             "reconstruction_quality": quality,
+            "iterations": model.n_iter_,
         })
         if quality >= RECONSTRUCTION_TARGET and selected is None:
             selected = model, rank, quality
@@ -122,8 +128,9 @@ def fit_nnmf(
             random_state=RANDOM_STATE,
             max_iter=MAX_ITER,
         )
-        best_scores = best_model.fit_transform(values)
-        best_quality = reconstruction_quality(values, best_model.inverse_transform(best_scores))
+        best_scores = best_model.fit_transform(normalized_values)
+        best_reconstruction = data_min + data_range * best_model.inverse_transform(best_scores)
+        best_quality = reconstruction_quality(values, best_reconstruction)
         selected = best_model, best_rank, best_quality
         print(
             f"\nWarning: no rank through {min(MAX_COMPONENTS, X.shape[1])} reached "
@@ -132,10 +139,14 @@ def fit_nnmf(
         )
 
     model, rank, _ = selected
-    scores = model.transform(values)
+    scores = model.transform(normalized_values)
     score_columns = [f"Factor{i + 1}" for i in range(rank)]
     score_frame = pd.DataFrame(scores, index=X.index, columns=score_columns)
-    components = pd.DataFrame(model.components_.T, index=X.columns, columns=score_columns)
+    components = pd.DataFrame(
+        model.components_.T * data_range,
+        index=X.columns,
+        columns=score_columns,
+    )
     print(f"\nSelected NNMF rank: {rank}")
     print(metric_frame.head().round(4).to_string(index=False))
     return model, rank, score_frame, components, metric_frame
