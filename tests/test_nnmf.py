@@ -4,7 +4,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-
 NNMF_PATH = Path(__file__).resolve().parents[1] / "src" / "NNMF" / "nnmf.py"
 
 
