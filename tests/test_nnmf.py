@@ -29,3 +29,27 @@ def test_nnmf_converges_on_mw_scale_data():
 
     assert quality.loc[3] > 0.99
     assert (quality.diff().dropna() > -0.005).all()
+
+
+def test_profile_matrices_have_expected_horizons():
+    module = load_nnmf_module()
+    index = pd.date_range("2020-01-01", "2021-12-31 23:00:00", freq="h")
+    frame = pd.DataFrame(
+        {
+            "PJME_MW": 30_000 + np.arange(len(index), dtype=float) % 500,
+            "is_imputed": False,
+            "is_outlier": False,
+        },
+        index=index,
+    )
+
+    hourly, _ = module.build_profile_matrix(frame, "hour")
+    daily, _ = module.build_profile_matrix(frame, "day")
+    weekly, _ = module.build_profile_matrix(frame, "week")
+
+    assert hourly.shape[1] == 24
+    assert daily.shape[1] == 7
+    assert weekly.shape[1] == 365
+    assert len(weekly) == 2
+    assert weekly.columns[0] == "d001"
+    assert weekly.columns[-1] == "d365"

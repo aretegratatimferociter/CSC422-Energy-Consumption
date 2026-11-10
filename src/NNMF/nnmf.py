@@ -11,7 +11,7 @@ CSV_PATH = REPO_ROOT / "data" / "processed" / "PJME_hourly_clean.csv"
 OUT_DIR = REPO_ROOT / "reports" / "nnmf"
 VALUE_COL = "PJME_MW"
 RECONSTRUCTION_TARGET = 0.95
-MAX_COMPONENTS = 24
+MAX_COMPONENTS = 53
 RANDOM_STATE = 0
 MAX_ITER = 2_000
 
@@ -27,9 +27,9 @@ sns.set_theme(style="whitegrid", context="notebook")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def finish_plot(name: str) -> None:
+def finish_plot(name: str, output_dir: Path) -> None:
     plt.tight_layout()
-    plt.savefig(OUT_DIR / f"{name}.png", dpi=150)
+    plt.savefig(output_dir / f"{name}.png", dpi=150)
     plt.close("all")
 
 
@@ -49,31 +49,67 @@ def load_data(path: str | Path) -> pd.DataFrame:
     return df
 
 
-def build_daily_matrix(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+def build_profile_matrix(
+    df: pd.DataFrame,
+    horizon: str,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if horizon not in {"hour", "day", "week"}:
+        raise ValueError("horizon must be one of: hour, day, week")
+
     d = df.copy()
     d["date"] = d.index.normalize()
-    d["hour"] = d.index.hour
+    if horizon == "hour":
+        d["position"] = d.index.hour
+        d["profile"] = d["date"]
+        d["profile_value"] = d[VALUE_COL]
+        expected_positions = range(24)
+        column_names = [f"h{position:02d}" for position in expected_positions]
+        profile_label = "days"
+    elif horizon == "day":
+        d["position"] = d.index.dayofweek
+        d["profile"] = d["date"] - pd.to_timedelta(d["position"], unit="D")
+        d["profile_value"] = d[VALUE_COL]
+        expected_positions = range(7)
+        column_names = DAY_NAMES
+        profile_label = "weeks"
+    else:
+        d = d.groupby("date").agg(
+            profile_value=(VALUE_COL, "mean"),
+            is_imputed=("is_imputed", "mean"),
+            is_outlier=("is_outlier", "any"),
+        ).reset_index()
+        d["profile"] = pd.to_datetime(d["date"].dt.year.astype(str) + "-01-01")
+        d = d[d["date"].dt.month.ne(2) | d["date"].dt.day.ne(29)]
+        d["position"] = d.groupby("profile").cumcount() + 1
+        expected_positions = range(1, 366)
+        column_names = [f"d{position:03d}" for position in expected_positions]
+        profile_label = "calendar years"
 
-    matrix = d.pivot_table(index="date", columns="hour", values=VALUE_COL, aggfunc="mean")
-    day_flags = d.groupby("date").agg(
+    matrix = d.pivot_table(index="profile", columns="position", values="profile_value", aggfunc="mean")
+    profile_flags = d.groupby("profile").agg(
         imputed_frac=("is_imputed", "mean"),
         has_outlier=("is_outlier", "any"),
     )
 
-    complete = matrix.notna().all(axis=1)
-    print(f"Days total: {len(matrix):,} | incomplete (dropped): {(~complete).sum()}")
-    matrix, day_flags = matrix[complete], day_flags.loc[complete]
+    complete = matrix.reindex(columns=expected_positions).notna().all(axis=1)
+    print(f"{profile_label.title()} total: {len(matrix):,} | incomplete (dropped): {(~complete).sum()}")
+    matrix = matrix.reindex(columns=expected_positions)[complete]
+    profile_flags = profile_flags.loc[matrix.index]
 
-    meta = day_flags.copy()
-    meta["daily_mean"] = matrix.mean(axis=1)
+    meta = profile_flags.copy()
+    meta["profile_mean"] = matrix.mean(axis=1)
     meta["weekday"] = matrix.index.dayofweek
     meta["is_weekend"] = meta["weekday"] >= 5
     meta["month"] = matrix.index.month
     meta["year"] = matrix.index.year
     meta["season"] = meta["month"].map(SEASON_MAP)
 
-    matrix.columns = [f"h{hour:02d}" for hour in matrix.columns]
+    matrix.columns = column_names
     return matrix, meta
+
+
+def build_daily_matrix(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    return build_profile_matrix(df, "hour")
 
 
 def reconstruction_quality(matrix: np.ndarray, reconstruction: np.ndarray) -> float:
@@ -100,7 +136,8 @@ def fit_nnmf(
 
     metrics: list[dict[str, float | int]] = []
     selected: tuple[NMF, int, float] | None = None
-    for rank in range(1, min(MAX_COMPONENTS, X.shape[1]) + 1):
+    max_rank = min(MAX_COMPONENTS, X.shape[0], X.shape[1])
+    for rank in range(1, max_rank + 1):
         model = NMF(
             n_components=rank,
             init="nndsvda",
@@ -133,7 +170,7 @@ def fit_nnmf(
         best_quality = reconstruction_quality(values, best_reconstruction)
         selected = best_model, best_rank, best_quality
         print(
-            f"\nWarning: no rank through {min(MAX_COMPONENTS, X.shape[1])} reached "
+            f"\nWarning: no rank through {max_rank} reached "
             f"{RECONSTRUCTION_TARGET:.0%}; using best rank {best_rank} "
             f"({best_quality:.2%} reconstruction quality)."
         )
@@ -152,7 +189,7 @@ def fit_nnmf(
     return model, rank, score_frame, components, metric_frame
 
 
-def plot_rank_metrics(metrics: pd.DataFrame, rank: int) -> None:
+def plot_rank_metrics(metrics: pd.DataFrame, rank: int, output_dir: Path, horizon: str) -> None:
     _, ax_quality = plt.subplots(figsize=(8, 4.5))
     ax_error = ax_quality.twinx()
     quality_line = ax_quality.plot(
@@ -170,41 +207,49 @@ def plot_rank_metrics(metrics: pd.DataFrame, rank: int) -> None:
     ax_quality.set(
         xlabel="Number of factors",
         ylabel="Reconstruction quality",
-        title=f"NNMF scree plot (selected rank k={rank})",
+        title=f"NNMF {horizon} horizon (selected rank k={rank})",
     )
     ax_error.set_ylabel("Reconstruction error")
     ax_quality.set_xticks(metrics["rank"])
     lines = quality_line + error_line + ax_quality.lines[-2:]
     ax_quality.legend(lines, [line.get_label() for line in lines], loc="center right")
-    finish_plot("01_rank_selection")
+    finish_plot("01_rank_selection", output_dir)
 
 
-def plot_components(components: pd.DataFrame) -> None:
-    hours = range(len(components))
+def plot_components(components: pd.DataFrame, output_dir: Path, horizon: str) -> None:
+    positions = range(len(components))
     _, ax = plt.subplots(figsize=(10, 5))
     for column in components.columns:
-        ax.plot(hours, components[column], marker="o", ms=3, label=column)
+        ax.plot(positions, components[column], marker="o", ms=3, label=column)
+    tick_step = max(1, len(components) // 12)
     ax.set(
-        xlabel="Hour of day",
+        xlabel={"hour": "Hour of day", "day": "Day of week", "week": "Day of year"}[horizon],
         ylabel="Component weight (MW)",
-        title="NNMF component profiles",
-        xticks=range(0, 24, 2),
+        title=f"NNMF {horizon} horizon component profiles",
+        xticks=list(positions)[::tick_step],
+        xticklabels=components.index[::tick_step],
     )
     ax.legend()
-    finish_plot("02_component_profiles")
+    finish_plot("02_component_profiles", output_dir)
 
-    _, ax = plt.subplots(figsize=(7, 8))
+    _, ax = plt.subplots(figsize=(7, max(8, len(components) / 8)))
     sns.heatmap(components, cmap="YlOrRd", ax=ax, cbar_kws={"label": "Component weight (MW)"})
-    ax.set(title="NNMF component profiles by hour", xlabel="Factor", ylabel="Hour")
-    finish_plot("03_components_heatmap")
+    ax.set(
+        title=f"NNMF {horizon} horizon component profiles",
+        xlabel="Factor",
+        ylabel={"hour": "Hour", "day": "Day", "week": "Day of year"}[horizon],
+    )
+    finish_plot("03_components_heatmap", output_dir)
 
 
 def plot_top_factors(
     scores: pd.DataFrame,
     components: pd.DataFrame,
     matrix: pd.DataFrame,
+    output_dir: Path,
+    horizon: str,
     top_n: int = 3,
-    representative_days: int = 3,
+    representative_profiles: int = 3,
 ) -> None:
     ranked = scores.mean().sort_values(ascending=False).head(top_n)
     n_factors = len(ranked)
@@ -212,38 +257,41 @@ def plot_top_factors(
         n_factors, 2, figsize=(14, 4 * n_factors),
         squeeze=False, gridspec_kw={"width_ratios": [1, 1.4]},
     )
-    hours = range(len(components))
+    positions = range(len(components))
 
     for row, factor in enumerate(ranked.index):
         factor_scores = scores[factor]
-        selected_dates = factor_scores.nlargest(representative_days).index
+        selected_profiles = factor_scores.nlargest(representative_profiles).index
         profile_ax, dates_ax = axes[row]
 
-        profile_ax.plot(hours, components[factor], marker="o", ms=3, color="steelblue")
+        profile_ax.plot(positions, components[factor], marker="o", ms=3, color="steelblue")
+        tick_step = max(1, len(components) // 12)
         profile_ax.set(
             title=f"{factor} profile (mean activation {ranked[factor]:.1f})",
-            xlabel="Hour of day",
+            xlabel={"hour": "Hour of day", "day": "Day of week", "week": "Day of year"}[horizon],
             ylabel="Component weight (MW)",
-            xticks=range(0, 24, 2),
+            xticks=list(positions)[::tick_step],
+            xticklabels=components.index[::tick_step],
         )
 
-        for date in selected_dates:
+        for profile in selected_profiles:
             dates_ax.plot(
-                hours, matrix.loc[date].to_numpy(), lw=1.5,
-                label=f"{date:%Y-%m-%d} (activation {factor_scores.loc[date]:.1f})",
+                positions, matrix.loc[profile].to_numpy(), lw=1.5,
+                label=f"{profile:%Y-%m-%d} (activation {factor_scores.loc[profile]:.1f})",
             )
         dates_ax.set(
-            title=f"{factor} representative days",
-            xlabel="Hour of day",
+            title=f"{factor} representative profiles",
+            xlabel={"hour": "Hour of day", "day": "Day of week", "week": "Day of year"}[horizon],
             ylabel="Load (MW)",
-            xticks=range(0, 24, 2),
+            xticks=list(positions)[::tick_step],
+            xticklabels=components.index[::tick_step],
         )
         dates_ax.legend(fontsize="small")
 
-    finish_plot("06_top_factors")
+    finish_plot("06_top_factors", output_dir)
 
 
-def plot_scores(scores: pd.DataFrame, meta: pd.DataFrame) -> None:
+def plot_scores(scores: pd.DataFrame, meta: pd.DataFrame, output_dir: Path, horizon: str) -> None:
     columns = list(scores.columns)
     if len(columns) >= 2:
         _, axes = plt.subplots(1, 2, figsize=(14, 5.5))
@@ -251,13 +299,13 @@ def plot_scores(scores: pd.DataFrame, meta: pd.DataFrame) -> None:
             x=scores[columns[0]], y=scores[columns[1]], hue=meta["season"],
             s=12, alpha=0.6, ax=axes[0],
         )
-        axes[0].set_title("Day activations by season")
+        axes[0].set_title(f"{horizon.title()} activations by season")
         sns.scatterplot(
             x=scores[columns[0]], y=scores[columns[1]], hue=meta["is_weekend"],
             s=12, alpha=0.6, ax=axes[1],
         )
-        axes[1].set_title("Day activations by weekend")
-        finish_plot("04_activation_scatter")
+        axes[1].set_title(f"{horizon.title()} activations by weekend")
+        finish_plot("04_activation_scatter", output_dir)
 
     n_plots = min(3, len(columns))
     _, axes = plt.subplots(n_plots, 1, figsize=(13, 3 * n_plots), sharex=True, squeeze=False)
@@ -273,24 +321,40 @@ def plot_scores(scores: pd.DataFrame, meta: pd.DataFrame) -> None:
         ax.set_ylabel(column)
     axes[0, 0].legend(loc="upper right")
     axes[0, 0].set_title("NNMF factor activations over time")
-    finish_plot("05_activation_timeseries")
+    finish_plot("05_activation_timeseries", output_dir)
+
+
+def run_horizon(df: pd.DataFrame, horizon: str) -> None:
+    output_dir = OUT_DIR / horizon
+    output_dir.mkdir(parents=True, exist_ok=True)
+    X, meta = build_profile_matrix(df, horizon)
+    print(f"{horizon.title()} horizon matrix shape: {X.shape}")
+
+    _, rank, scores, components, metrics = fit_nnmf(X)
+    plot_rank_metrics(metrics, rank, output_dir, horizon)
+    plot_components(components, output_dir, horizon)
+    plot_top_factors(scores, components, X, output_dir, horizon)
+    plot_scores(scores, meta, output_dir, horizon)
+
+    scores.join(meta).to_csv(output_dir / "nnmf_scores.csv")
+    components.to_csv(output_dir / "nnmf_components.csv")
+    metrics.to_csv(output_dir / "nnmf_rank_metrics.csv", index=False)
+    pd.DataFrame([{
+        "horizon": horizon,
+        "profiles": len(X),
+        "profile_width": X.shape[1],
+        "selected_rank": rank,
+        "reconstruction_quality": metrics.loc[
+            metrics["rank"].eq(rank), "reconstruction_quality"
+        ].iloc[0],
+    }]).to_csv(output_dir / "nnmf_summary.csv", index=False)
+    print(f"\nDone. Outputs saved to: {output_dir.resolve()}")
 
 
 def main() -> None:
     df = load_data(CSV_PATH)
-    X, meta = build_daily_matrix(df)
-    print(f"Daily matrix shape: {X.shape}")
-
-    _, rank, scores, components, metrics = fit_nnmf(X)
-    plot_rank_metrics(metrics, rank)
-    plot_components(components)
-    plot_top_factors(scores, components, X)
-    plot_scores(scores, meta)
-
-    scores.join(meta).to_csv(OUT_DIR / "nnmf_scores.csv")
-    components.to_csv(OUT_DIR / "nnmf_components.csv")
-    metrics.to_csv(OUT_DIR / "nnmf_rank_metrics.csv", index=False)
-    print(f"\nDone. Outputs saved to: {OUT_DIR.resolve()}")
+    for horizon in ("hour", "day", "week"):
+        run_horizon(df, horizon)
 
 
 if __name__ == "__main__":

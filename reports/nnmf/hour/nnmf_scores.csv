@@ -1,4 +1,4 @@
-date,Factor1,Factor2,imputed_frac,has_outlier,daily_mean,weekday,is_weekend,month,year,season
+profile,Factor1,Factor2,imputed_frac,has_outlier,profile_mean,weekday,is_weekend,month,year,season
 2002-01-02,0.13684827952340958,0.09647358588778267,0.0,False,34261.541666666664,2,False,1,2002,Winter
 2002-01-03,0.13960349751439086,0.09280831475875913,0.0,False,34511.875,3,False,1,2002,Winter
 2002-01-04,0.1380851584294194,0.07475288508638953,0.0,False,33715.458333333336,4,False,1,2002,Winter
