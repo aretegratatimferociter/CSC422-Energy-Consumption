@@ -15,7 +15,8 @@ shared, leakage-safe feature pipeline.
 - Preserves chronological order when creating train and test periods.
 - Evaluates persistence, 24-hour moving average, decision tree, and random forest forecasts.
 - Reports MAE, RMSE, and MAPE and exports predictions and feature importances.
-- Runs exploratory analysis and PCA on complete daily load profiles.
+- Runs exploratory analysis, PCA, and NNMF on complete hourly, weekly, and calendar-year load
+  profiles.
 - Includes automated tests and GitHub Actions continuous integration.
 
 ## Project layout
@@ -30,6 +31,7 @@ models/                    trained models (not committed)
 notebooks/                 exploratory analyses
 reports/figures/           generated figures (not committed)
 reports/pca/               generated EDA/PCA figures and tables (not committed)
+reports/nnmf/                generated NNMF figures and tables (not committed)
 src/energy_forecasting/    reusable data and modeling pipeline
 tests/                     automated tests
 ```
@@ -122,12 +124,50 @@ pytest
 From the repository root, run:
 
 ```bash
-python src/PCA/NNMF/pca.py
+python src/PCA/pca.py
 ```
 
 The script groups the hourly series into complete 24-hour daily profiles, standardizes each hour,
 and calculates principal components explaining at least 95% of the variance. It also produces
 hourly, weekday/weekend, seasonal, loading, and score visualizations under `reports/pca/`.
+
+## Run NNMF
+
+From the repository root, run:
+
+```bash
+python src/NNMF/nnmf.py
+```
+
+The NNMF script fits three complete profile horizons from the hourly series:
+
+- `hour`: one row per day with 24 hourly columns;
+- `day`: one row per Monday-Sunday week with 7 daily columns; and
+- `week`: one row per calendar year with 365 daily columns. February 29 is removed from leap
+  years so all calendar years share the same daily positions and weekday structure.
+
+Each horizon fits nonnegative factors after min-max normalization to [0, 1]. Reconstruction
+quality is evaluated after converting the fitted output back to MW, and component profiles are
+reported as MW contributions above the dataset minimum. The script selects the smallest number
+of factors reaching 95% reconstruction quality, defined as
+
+`1 - ||X - WH||² / ||X - mean(X)||²`.
+
+If no rank through the profile width reaches the target, it reports a warning and uses the rank with the best
+reconstruction quality.
+
+Figures and tables are written under `reports/nnmf/hour/`, `reports/nnmf/day/`, and
+`reports/nnmf/week/`, including:
+
+- a scree-style rank plot showing reconstruction quality and reconstruction error;
+- factor activation plots and horizon-specific factor loadings (line and heatmap views);
+- a top-factor summary ranked by mean activation, with each factor profile and its three
+  highest-activation representative profiles; and
+- CSV tables containing factor activations, component profiles, rank-selection metrics, and
+  metadata.
+
+These visualizations are descriptive analysis only and are not connected to the forecasting
+models.
 
 ## Modeling rules
 
