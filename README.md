@@ -15,7 +15,8 @@ shared, leakage-safe feature pipeline.
 - Preserves chronological order when creating train and test periods.
 - Evaluates persistence, 24-hour moving average, decision tree, and random forest forecasts.
 - Reports MAE, RMSE, and MAPE and exports predictions and feature importances.
-- Runs exploratory analysis, PCA, and NNMF on complete daily load profiles.
+- Runs exploratory analysis, PCA, and NNMF on complete hourly, weekly, and calendar-year load
+  profiles.
 - Includes automated tests and GitHub Actions continuous integration.
 
 ## Project layout
@@ -160,21 +161,30 @@ From the repository root, run:
 python src/NNMF/nnmf.py
 ```
 
-The NNMF script groups the hourly series into complete 24-hour daily profiles and fits
-nonnegative factors to the raw MW values. It selects the smallest number of factors reaching 95%
-reconstruction quality, defined as
+The NNMF script fits three complete profile horizons from the hourly series:
+
+- `hour`: one row per day with 24 hourly columns;
+- `day`: one row per Monday-Sunday week with 7 daily columns; and
+- `week`: one row per calendar year with 365 daily columns. February 29 is removed from leap
+  years so all calendar years share the same daily positions and weekday structure.
+
+Each horizon fits nonnegative factors after min-max normalization to [0, 1]. Reconstruction
+quality is evaluated after converting the fitted output back to MW, and component profiles are
+reported as MW contributions above the dataset minimum. The script selects the smallest number
+of factors reaching 95% reconstruction quality, defined as
 
 `1 - ||X - WH||² / ||X - mean(X)||²`.
 
-If no rank through 24 reaches the target, it reports a warning and uses the rank with the best
+If no rank through the profile width reaches the target, it reports a warning and uses the rank with the best
 reconstruction quality.
 
-Figures and tables are written under `reports/nnmf/`, including:
+Figures and tables are written under `reports/nnmf/hour/`, `reports/nnmf/day/`, and
+`reports/nnmf/week/`, including:
 
 - a scree-style rank plot showing reconstruction quality and reconstruction error;
-- factor activation plots and hourly factor loadings (line and heatmap views);
+- factor activation plots and horizon-specific factor loadings (line and heatmap views);
 - a top-factor summary ranked by mean activation, with each factor profile and its three
-  highest-activation representative days; and
+  highest-activation representative profiles; and
 - CSV tables containing factor activations, component profiles, rank-selection metrics, and
   metadata.
 

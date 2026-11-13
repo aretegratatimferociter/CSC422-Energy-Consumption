@@ -11,10 +11,10 @@ __pycache__/
 data/raw/*
 data/processed/*
 models/*
-reports/figures/*
-reports/pca/
-reports/nnmf/
-reports/*.csv
+# reports/figures/*
+# reports/pca/
+# reports/nnmf/
+# reports/*.csv
 reports/final/predictions.csv
 !data/raw/.gitkeep
 !data/raw/PJME_hourly.csv
