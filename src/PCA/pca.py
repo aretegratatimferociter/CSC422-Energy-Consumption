@@ -29,18 +29,85 @@ SEASON_MAP = {12: "Winter", 1: "Winter", 2: "Winter",
 sns.set_theme(style="whitegrid", context="notebook")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-
-def finish_plot(name: str) -> None:
+def finish_plot(name: str, out_dir: Path = OUT_DIR) -> None:
     """
     Closes all plots
-
+    and now makes a folder for each
     Args:
         name (str): the name of the file
     """
     plt.tight_layout()
-    plt.savefig(OUT_DIR / f"{name}.png", dpi=150)
+    plt.savefig(out_dir / f"{name}.png", dpi=150)
  
     plt.close("all")
+
+def build_monthly_matrix(df: pd.DataFrame):
+    """
+    One row per calendar month, 168 columns (day-of-week x hour),
+    each averaged over all the weeks in that month.
+    """
+    d = df.copy()
+    d["month_start"] = d.index.to_period("M").to_timestamp()
+    d["slot"] = d.index.dayofweek * 24 + d.index.hour   # 0..167
+
+    X = d.pivot_table(index="month_start", columns="slot",
+                      values=VALUE_COL, aggfunc="mean")
+    X = X.reindex(columns=range(168))
+
+    # Drop partial months (record usually starts/ends mid-month)
+    days_present = (pd.Series(d.index.normalize(), index=d.index)
+                      .groupby(d["month_start"]).nunique())
+    full_month = days_present.reindex(X.index) >= X.index.days_in_month
+
+    flags = d.groupby("month_start").agg(
+        imputed_frac=("is_imputed", "mean"),
+        has_outlier=("is_outlier", "any"),
+    )
+
+    complete = X.notna().all(axis=1) & full_month
+    print(f"Months total: {len(X):,} | incomplete (dropped): {(~complete).sum()}")
+    X, flags = X[complete], flags.loc[complete]
+
+    meta = flags.copy()
+    meta["mean_load"] = X.mean(axis=1)
+    meta["month"] = X.index.month
+    meta["year"] = X.index.year
+    meta["season"] = meta["month"].map(SEASON_MAP)
+
+    X.columns = [f"d{s // 24}h{s % 24:02d}" for s in X.columns]
+    return X, meta
+
+
+def weekly_matrix(df: pd.DataFrame):
+    """
+    makes a matrix that is split by week
+    """
+    d = df.copy()
+    d["week_start"] = (d.index.normalize()
+                       - pd.to_timedelta(d.index.dayofweek, unit="D"))
+    d["slot"] = d.index.dayofweek * 24 + d.index.hour   # 0..167
+
+    X = d.pivot_table(index="week_start", columns="slot",
+                      values=VALUE_COL, aggfunc="mean")
+    X = X.reindex(columns=range(168))   # missing slots (DST) become NaN
+
+    flags = d.groupby("week_start").agg(
+        imputed_frac=("is_imputed", "mean"),
+        has_outlier=("is_outlier", "any"),
+    )
+
+    complete = X.notna().all(axis=1)
+    print(f"Weeks total: {len(X):,} | incomplete (dropped): {(~complete).sum()}")
+    X, flags = X[complete], flags.loc[complete]
+
+    meta = flags.copy()
+    meta["daily_mean"] = X.mean(axis=1)   # actually the weekly mean; kept so the column name matches
+    meta["month"] = X.index.month         # month the week starts in
+    meta["year"] = X.index.year
+    meta["season"] = meta["month"].map(SEASON_MAP)
+
+    X.columns = [f"d{s // 24}h{s % 24:02d}" for s in X.columns]
+    return X, meta
 
 
 def load_data(path: str | Path) -> pd.DataFrame:
@@ -271,7 +338,7 @@ def fit_pca(X: pd.DataFrame):
 
 
 
-def plot_scree(pca: PCA, k: int) -> None:
+def plot_scree(pca: PCA, k: int, out_dir: Path) -> None:
     evr = pca.explained_variance_ratio_[:12]
     cum = np.cumsum(pca.explained_variance_ratio_)[:12]
     x = np.arange(1, len(evr) + 1)
@@ -283,68 +350,93 @@ def plot_scree(pca: PCA, k: int) -> None:
     ax.set(xlabel="Principal component", ylabel="Explained variance ratio",
            title=f"Scree plot (k={k} retained)")
     ax.legend()
-    finish_plot("01_scree")
+    finish_plot("01_scree", out_dir)
 
 
-def plot_loadings(loadings: pd.DataFrame, n: int = 4) -> None:
+def plot_loadings(loadings: pd.DataFrame, out_dir: Path, n: int = 4) -> None:
     cols = loadings.columns[:n]
-    _, ax = plt.subplots(figsize=(9, 4.5))
-    for c in cols:
-        ax.plot(range(24), loadings[c].values, marker="o", ms=3, label=c)
-    ax.axhline(0, color="k", lw=0.6)
-    ax.set(xlabel="Hour of day", ylabel="Loading",
-           title="PC loadings across the day", xticks=range(0, 24, 2))
-    ax.legend()
-    finish_plot("02_loadings_lines")
+    n_slots = len(loadings)
+    weekly = n_slots == 168
 
-    _, ax = plt.subplots(figsize=(7, 8))
-    sns.heatmap(loadings[cols], cmap="RdBu_r", center=0, annot=True, fmt=".2f",
+    _, ax = plt.subplots(figsize=(14 if weekly else 9, 4.5))
+    for c in cols:
+        ax.plot(range(n_slots), loadings[c].values,
+                marker=None if weekly else "o", ms=3, lw=1, label=c)
+    ax.axhline(0, color="k", lw=0.6)
+    if weekly:
+        for b in range(24, 168, 24):
+            ax.axvline(b, color="gray", lw=0.5, ls=":")
+        ax.set_xticks(range(12, 168, 24), DAY_NAMES)
+        ax.set(xlabel="Day of week", ylabel="Loading",
+               title="PC loadings across the week")
+    else:
+        ax.set(xlabel="Hour of day", ylabel="Loading",
+               title="PC loadings across the day", xticks=range(0, 24, 2))
+    ax.legend()
+    finish_plot("02_loadings_lines", out_dir)
+
+    _, ax = plt.subplots(figsize=(7, 20 if weekly else 8))
+    sns.heatmap(loadings[cols], cmap="RdBu_r", center=0, annot=not weekly, fmt=".2f",
+                yticklabels=True if not weekly else 12,
                 cbar_kws={"label": "Loading"}, ax=ax)
     ax.set_title("Loadings heatmap")
-    finish_plot("03_loadings_heatmap")
+    finish_plot("03_loadings_heatmap", out_dir)
 
 
-def plot_scores(scores: pd.DataFrame, meta: pd.DataFrame) -> None:
+def plot_scores(scores: pd.DataFrame, meta: pd.DataFrame, out_dir: Path,
+                second_hue: str, smooth: int) -> None:
     _, axes = plt.subplots(1, 2, figsize=(14, 5.5))
     sns.scatterplot(x=scores["PC1"], y=scores["PC2"], hue=meta["season"],
                     s=12, alpha=0.6, ax=axes[0])
-    axes[0].set_title("Day scores by season")
-    sns.scatterplot(x=scores["PC1"], y=scores["PC2"], hue=meta["is_weekend"],
+    axes[0].set_title("Scores by season")
+    sns.scatterplot(x=scores["PC1"], y=scores["PC2"], hue=meta[second_hue],
                     s=12, alpha=0.6, ax=axes[1])
-    axes[1].set_title("Day scores by weekend")
-    finish_plot("04_score_scatter")
+    axes[1].set_title(f"Scores by {second_hue}")
+    finish_plot("04_score_scatter", out_dir)
 
     _, axes = plt.subplots(3, 1, figsize=(13, 8), sharex=True)
     for ax, pc in zip(axes, ["PC1", "PC2", "PC3"]):
         ax.plot(scores.index, scores[pc], lw=0.4, alpha=0.6)
-        ax.plot(scores.index, scores[pc].rolling(30, center=True).mean(),
-                color="crimson", lw=1.2, label="30-day mean")
+        ax.plot(scores.index, scores[pc].rolling(smooth, center=True).mean(),
+                color="crimson", lw=1.2, label=f"{smooth}-period mean")
         ax.set_ylabel(pc)
     axes[0].legend(loc="upper right")
     axes[0].set_title("PC scores over time")
-    finish_plot("05_scores_timeseries")
+    finish_plot("05_scores_timeseries", out_dir)
 
+LEVELS = {
+    "daily":  (build_daily_matrix,     "is_weekend",   30),   
+    "weekly": (weekly_matrix,          "year",          4),
+    "monthly": (build_monthly_matrix,  "year",         12),   
+}
+
+
+def run_pca_level(df: pd.DataFrame, level: str) -> None:
+    builder, second_hue, smooth = LEVELS[level]
+    out_dir = OUT_DIR / level
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"\n{'=' * 20} {level.upper()} PCA {'=' * 20}")
+    X, meta = builder(df)
+    print(f"{level.capitalize()} matrix shape: {X.shape}")
+
+    _, pca, k, scores, loadings = fit_pca(X)
+
+    plot_scree(pca, k, out_dir)
+    plot_loadings(loadings, out_dir)
+    plot_scores(scores, meta, out_dir, second_hue, smooth)
+
+    scores.join(meta).to_csv(out_dir / "pc_scores.csv")
+    loadings.to_csv(out_dir / "pc_loadings.csv")
+    print(f"Outputs saved to: {out_dir.resolve()}")
 
 
 def main() -> None:
     df = load_data(CSV_PATH)
-
-    # Visual EDA + weekday/weekend comparison (before any modelling)
     run_eda(df)
 
-    X, meta = build_daily_matrix(df)
-    print(f"Daily matrix shape: {X.shape}")
-
-    _, pca, k, scores, loadings = fit_pca(X)
-
-    plot_scree(pca, k)
-    plot_loadings(loadings)
-    plot_scores(scores, meta)
-
-
-    scores.join(meta).to_csv(OUT_DIR / "pc_scores.csv")
-    loadings.to_csv(OUT_DIR / "pc_loadings.csv")
-    print(f"\nDone. Outputs saved to: {OUT_DIR.resolve()}")
+    for level in LEVELS:
+        run_pca_level(df, level)
 
 
 if __name__ == "__main__":
