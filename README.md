@@ -112,6 +112,28 @@ The default chronological 80/20 run produced the following holdout results:
 These are the weather-enabled default run's initial single-holdout results, not final
 model-selection estimates. Time-series cross-validation and tuning remain roadmap items.
 
+## Run the final experiment
+
+The final experiment implements the remaining modeling work identified in the midterm report:
+expanding-window cross-validation, deterministic tree-model tuning, a controlled energy-only
+versus weather-enabled comparison, final feature importances, prediction-versus-actual plots, and
+residual analysis.
+
+```bash
+energy-final
+```
+
+Both feature sets use the same timestamps, chronological 80/20 split, and tuned model settings.
+Hyperparameters and the final model family are selected only from the training period; the final
+20% holdout remains untouched until evaluation. Results are written to `reports/final/`, including
+the fold-level validation record, metrics, selected parameters, a readable summary, and four
+figures. The fitted final model is written to `models/`.
+
+The completed run selected the Random Forest by validation MAE. On the untouched holdout, weather
+features reduced its MAE from 305.5 MW to 297.4 MW (a 2.67% improvement), with a final RMSE of
+415.3 MW and MAPE of 0.94%. See [`reports/final/summary.md`](reports/final/summary.md) for the full
+controlled comparison and interpretation.
+
 Run the quality checks with:
 
 ```bash
@@ -178,7 +200,5 @@ holdout and feature matrix to keep results directly comparable.
 ## Roadmap
 
 - Add an exploratory notebook with hourly, weekly, seasonal, and holiday visualizations.
-- Add time-series cross-validation and model hyperparameter tuning.
-- Compare PCA/NMF loadings with tree-based feature importances.
 - Choose the forecast horizon (next hour, next day) and how weather is provided for it.
 - Produce final comparison figures, report, and presentation.

@@ -15,6 +15,7 @@ models/*
 # reports/pca/
 # reports/nnmf/
 # reports/*.csv
+reports/final/predictions.csv
 !data/raw/.gitkeep
 !data/raw/PJME_hourly.csv
 # Raw weather and population data are committed. Author: plholt3
