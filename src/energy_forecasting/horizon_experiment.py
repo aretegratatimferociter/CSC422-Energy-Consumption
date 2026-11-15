@@ -188,18 +188,24 @@ def write_variance_curves(features: pd.DataFrame, output: Path) -> None:
     pca_curve, nnmf_curve = variance_curves(features)
     pca_curve.to_csv(output / "pca_cumulative_variance.csv", index=False)
     nnmf_curve.to_csv(output / "nnmf_rank_quality.csv", index=False)
+    plot_variance_curves(pca_curve, nnmf_curve, output)
+
+
+def plot_variance_curves(pca_curve: pd.DataFrame, nnmf_curve: pd.DataFrame, output: Path) -> None:
+    """Draw both variance charts from their CSV tables (so they can be redrawn without refitting)."""
     _plot_curve(
         pca_curve["component"], pca_curve["cumulative_variance"],
-        "Number of principal components (count)",
-        "Cumulative variance explained (fraction of total, 0-1)",
+        "Principal component (PC1 = largest; cumulative line includes every PC up to this one)",
+        "Variance explained (% of total)",
         "PCA on the model feature table: cumulative variance explained",
         output / "pca_cumulative_variance.png",
         bars=pca_curve["explained_variance_ratio"],
+        tick_prefix="PC",
     )
     _plot_curve(
         nnmf_curve["rank"], nnmf_curve["reconstruction_quality"],
-        "NNMF rank (number of factors, count)",
-        "Reconstruction quality (R², fraction 0-1)",
+        "NNMF rank (number of factors)",
+        "Reconstruction quality (R², % of variance rebuilt)",
         "NNMF on the model feature table: reconstruction quality by rank",
         output / "nnmf_rank_quality.png",
     )
@@ -511,30 +517,49 @@ def _style(axis) -> None:
     axis.tick_params(colors=TEXT_SECONDARY)
 
 
-def _plot_curve(x, y, xlabel: str, ylabel: str, title: str, path: Path, bars=None) -> None:
-    figure, axis = plt.subplots(figsize=(10, 4.8), facecolor=SURFACE)
+def _plot_curve(x, y, xlabel: str, ylabel: str, title: str, path: Path, bars=None,
+                tick_prefix: str = "") -> None:
+    """Line (cumulative) with optional per-component bars; every point and bar is labelled in %."""
+    x = pd.Series(x).reset_index(drop=True)
+    y = pd.Series(y).reset_index(drop=True) * 100
+    figure, axis = plt.subplots(figsize=(15, 6), facecolor=SURFACE)
     if bars is not None:
-        axis.bar(x, bars, width=0.7, color="#9ec5f0", label="Per component")
+        bars = pd.Series(bars).reset_index(drop=True) * 100
+        drawn = axis.bar(x, bars, width=0.7, color="#9ec5f0", label="Per component (% of total)")
+        for index, (rect, value) in enumerate(zip(drawn, bars)):
+            text = f"{value:.1f}%" if value >= 0.05 else "<0.1%"
+            if index == 0:  # first bar top coincides with the first cumulative point
+                axis.text(rect.get_x() + rect.get_width() / 2, value / 2, text, ha="center",
+                          va="center", fontsize=8, color=TEXT_PRIMARY)
+            else:
+                axis.text(rect.get_x() + rect.get_width() / 2, value + 0.8, text, ha="center",
+                          va="bottom", fontsize=7.5, color=TEXT_SECONDARY)
     axis.plot(x, y, color=HORIZON_COLORS["1 hour"], linewidth=2, marker="o", markersize=5,
-              label="Cumulative" if bars is not None else None)
-    axis.axhline(VARIANCE_TARGET, color=TEXT_SECONDARY, linestyle="--", linewidth=1)
-    axis.text(x.iloc[-1], VARIANCE_TARGET + 0.015, "95% threshold", ha="right",
-              fontsize=9, color=TEXT_SECONDARY)
-    chosen = int(x[y >= VARIANCE_TARGET].iloc[0]) if (y >= VARIANCE_TARGET).any() else None
-    if chosen is not None:
-        value = float(y[x == chosen].iloc[0])
-        axis.annotate(f"{chosen} needed ({value:.1%})", (chosen, value), xytext=(10, -28),
-                      textcoords="offset points", fontsize=9, color=TEXT_PRIMARY,
-                      arrowprops={"arrowstyle": "-", "color": TEXT_SECONDARY})
-    axis.set_xticks(list(x))
-    axis.set_ylim(0, 1.05)
+              label="Cumulative (% of total)" if bars is not None else "Quality (% rebuilt)")
+    for xi, yi in zip(x, y):
+        axis.annotate(f"{yi:.1f}%", (xi, yi), xytext=(0, 7), textcoords="offset points",
+                      ha="center", fontsize=7.5, color=TEXT_PRIMARY, zorder=5,
+                      bbox={"boxstyle": "square,pad=0.1", "facecolor": SURFACE, "edgecolor": "none"})
+    target = VARIANCE_TARGET * 100
+    axis.axhline(target, color=TEXT_SECONDARY, linestyle="--", linewidth=1)
+    axis.text(x.iloc[0] - 0.4, target + 1.2, "95% threshold", ha="left", fontsize=9,
+              color=TEXT_SECONDARY)
+    reached = y >= target
+    if reached.any():
+        position = int(reached.idxmax())
+        name = f"{tick_prefix}{int(x[position])}" if tick_prefix else f"rank {int(x[position])}"
+        axis.annotate(f"95% reached at {name} ({y[position]:.1f}%)", (x[position], y[position]),
+                      xytext=(25, -45), textcoords="offset points", fontsize=9,
+                      color=TEXT_PRIMARY, arrowprops={"arrowstyle": "-", "color": TEXT_SECONDARY})
+    axis.set_xticks(list(x), [f"{tick_prefix}{int(value)}" for value in x],
+                    fontsize=8 if tick_prefix else 9)
+    axis.set_ylim(0, 108)
     axis.set_xlabel(xlabel, color=TEXT_SECONDARY)
     axis.set_ylabel(ylabel, color=TEXT_SECONDARY)
     axis.set_title(title, color=TEXT_PRIMARY, loc="left")
     axis.grid(axis="y", alpha=0.25)
     axis.set_axisbelow(True)
-    if bars is not None:
-        axis.legend(frameon=False, loc="center right")
+    axis.legend(frameon=False, loc="center right")
     _style(axis)
     figure.tight_layout()
     figure.savefig(path, dpi=170, facecolor=SURFACE)
@@ -640,14 +665,26 @@ def _plot_mae(metrics: pd.DataFrame, labels: list[str], output: Path) -> None:
 
 def _plot_depth_curve(depth_curve: pd.DataFrame, labels: list[str], output: Path) -> None:
     """Training vs holdout MAE by max depth, one panel per horizon (overfitting check)."""
-    figure, axes = plt.subplots(1, len(labels), figsize=(15, 4.8), facecolor=SURFACE)
+    figure, axes = plt.subplots(1, len(labels), figsize=(18, 6), facecolor=SURFACE)
     for axis, label in zip(np.atleast_1d(axes), labels):
         frame = depth_curve[depth_curve["horizon"] == label].reset_index(drop=True)
         x = np.arange(len(frame))
         axis.plot(x, frame["train_mae_mw"], color=TEXT_SECONDARY, linewidth=2, marker="o",
-                  markersize=5, linestyle="--", label="Training MAE")
+                  markersize=5, linestyle="--", label="Training MAE (MW)")
         axis.plot(x, frame["holdout_mae_mw"], color=HORIZON_COLORS[label], linewidth=2,
-                  marker="o", markersize=5, label="Holdout MAE")
+                  marker="o", markersize=5, label="Holdout MAE (MW)")
+        for xi, train_value, holdout_value in zip(
+            x, frame["train_mae_mw"], frame["holdout_mae_mw"]
+        ):
+            # Higher value labelled above its point, lower value below, so crossing lines
+            # never put two labels in the same place.
+            holdout_up = holdout_value >= train_value
+            axis.annotate(f"{holdout_value:,.0f}", (xi, holdout_value),
+                          xytext=(0, 6 if holdout_up else -11), textcoords="offset points",
+                          ha="center", fontsize=6.5, color=TEXT_PRIMARY)
+            axis.annotate(f"{train_value:,.0f}", (xi, train_value),
+                          xytext=(0, -11 if holdout_up else 6), textcoords="offset points",
+                          ha="center", fontsize=6.5, color=TEXT_SECONDARY)
         selected = str(frame["selected_depth"].iloc[0] or "none")
         position = frame.index[frame["max_depth"].astype(str) == selected]
         if len(position):
@@ -664,8 +701,10 @@ def _plot_depth_curve(depth_curve: pd.DataFrame, labels: list[str], output: Path
         axis.grid(axis="y", alpha=0.25)
         axis.set_axisbelow(True)
         _style(axis)
-    np.atleast_1d(axes)[0].set_ylabel("MAE (MW, lower is better)", color=TEXT_SECONDARY)
-    np.atleast_1d(axes)[0].legend(frameon=False)
+    for index, axis in enumerate(np.atleast_1d(axes)):
+        # Every panel gets its own legend: the holdout line colour changes with the horizon.
+        axis.set_ylabel("MAE (MW, lower is better)", color=TEXT_SECONDARY)
+        axis.legend(frameon=False, loc="lower left" if index == 0 else "center right")
     figure.suptitle("Decision tree overfitting check: training vs holdout error by depth",
                     color=TEXT_PRIMARY, x=0.01, ha="left")
     figure.tight_layout()

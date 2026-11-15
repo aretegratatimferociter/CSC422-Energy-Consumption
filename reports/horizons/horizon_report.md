@@ -185,8 +185,8 @@ The random forest's settings and errors are unchanged by the re-tuning.
 ![Decision tree training vs holdout error by depth](tree_depth_curve.png)
 
 `tree_depth_curve.png` — x axis: maximum tree depth (levels); y axis: MAE (MW, lower is better);
-dashed grey = training MAE, solid = holdout MAE; dotted vertical line = cross-validation choice.
-Data: `tree_depth_curve.csv`.
+dashed grey = training MAE, solid = holdout MAE, every point labelled with its MAE (MW); dotted
+vertical line = cross-validation choice. Data: `tree_depth_curve.csv`.
 
 **1 hour ahead** (min samples per leaf = 8; 114,470 training rows)
 
@@ -257,14 +257,16 @@ Data: `tree_depth_curve.csv`.
 
 ![PCA cumulative variance explained](pca_cumulative_variance.png)
 
-`pca_cumulative_variance.png` — x axis: number of principal components (count); y axis: cumulative
-variance explained (fraction of total, 0–1); bars: variance explained by each component (fraction);
-dashed line: 95% threshold. Data: `pca_cumulative_variance.csv`.
+`pca_cumulative_variance.png` — x axis: principal component (PC1–PC25); y axis: variance
+explained (% of total); line: cumulative variance up to that component, each point labelled (%);
+bars: variance explained by that component alone, each bar labelled (%); dashed line: 95%
+threshold. Data: `pca_cumulative_variance.csv` (stored as fractions; × 100 for %).
 
 ![NNMF reconstruction quality by rank](nnmf_rank_quality.png)
 
-`nnmf_rank_quality.png` — x axis: NNMF rank (number of factors, count); y axis: reconstruction
-quality (R², fraction 0–1); dashed line: 95% threshold. Data: `nnmf_rank_quality.csv`.
+`nnmf_rank_quality.png` — x axis: NNMF rank (number of factors); y axis: reconstruction quality
+(R², % of variance rebuilt), each point labelled (%); dashed line: 95% threshold. Data:
+`nnmf_rank_quality.csv` (stored as fractions; × 100 for %).
 
 | Method | Components kept (count) | Variance explained / quality at that size (%) | First component (%) |
 | --- | ---: | ---: | --- |
