@@ -1,0 +1,16 @@
+{
+  "pca": {
+    "components_kept": 13,
+    "variance_explained": 0.9551863191879982,
+    "pc1_variance": 0.2791264823941579
+  },
+  "nnmf": {
+    "rank": 11,
+    "reconstruction_quality": 0.9545631530348653
+  },
+  "target_variance_captured": {
+    "1 hour": 0.9578602688081218,
+    "1 day": 0.9447369140714813,
+    "1 week": 0.9317674910830395
+  }
+}

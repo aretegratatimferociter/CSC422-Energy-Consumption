@@ -93,19 +93,25 @@ def tune_models_time_series(
     n_splits: int = 3,
     candidates: dict[str, list[dict[str, Any]]] | None = None,
     random_state: int = 42,
+    gap: int = 0,
 ) -> tuple[dict[str, dict[str, Any]], pd.DataFrame]:
     """Tune tree models with expanding-window validation and return every fold score.
 
     Candidate selection minimizes mean validation MAE. The splitter never trains on rows that
     occur after a validation row, which keeps model selection consistent with the final forecast.
+    ``gap`` drops that many rows between each fit and validation block, so a target shifted
+    ``gap`` hours ahead never reaches into the validation period. (gap: Author: plholt3)
     """
     if n_splits < 2:
         raise ValueError("n_splits must be at least 2")
     if len(train) <= n_splits:
         raise ValueError("Training data must contain more rows than time-series splits")
+    if gap < 0:
+        raise ValueError("gap must be non-negative")
 
     columns = feature_columns(train)
-    splitter = TimeSeriesSplit(n_splits=n_splits)
+    # Gap between fit and validation folds for multi-hour horizons. Author: plholt3
+    splitter = TimeSeriesSplit(n_splits=n_splits, gap=gap)
     candidates = candidates or tuning_candidates()
     records: list[dict[str, Any]] = []
 

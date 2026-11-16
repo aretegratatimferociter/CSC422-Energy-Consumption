@@ -28,6 +28,8 @@ energy-final = "energy_forecasting.final_experiment:main"
 energy-preprocess = "energy_forecasting.preprocess:main"
 # Weather feature command. Author: plholt3
 energy-weather = "energy_forecasting.weather_preprocess:main"
+# Forecast-horizon importance comparison. Author: plholt3
+energy-horizons = "energy_forecasting.horizon_experiment:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
