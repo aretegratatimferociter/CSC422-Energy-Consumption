@@ -331,6 +331,7 @@ def run(
     permutation_repeats: int = 5,
 ) -> dict[str, pd.DataFrame]:
     frames = aligned_feature_sets(data_path, weather_path)
+    output.mkdir(parents=True, exist_ok=True)
     # One split time for every horizon, so all horizons forecast from the same origins.
     _, base_test = chronological_split(frames["weather_enabled"], test_fraction)
     split_time = base_test.index.min()

@@ -6,6 +6,11 @@ shared, leakage-safe feature pipeline.
 
 ## Current capabilities
 
+Final deliverables: [written report](reports/final_report.md),
+[editable report](reports/CSC422_Final_Report.docx), and
+[final slides](https://docs.google.com/presentation/d/1G8gHuEEzzCfA9qqNX6xhGup07aBLsyYSOagQm47aPeo/edit).
+The latest three-horizon results are in [reports/horizons](reports/horizons/summary.md).
+
 - Cleans the raw PJME CSV and records every preprocessing decision in a quality report.
 - Validates types, sorts timestamps, resolves duplicates, and fills missing clock hours causally.
 - Flags imputed rows and statistical outliers without deleting valid demand peaks.
@@ -109,8 +114,9 @@ The default chronological 80/20 run produced the following holdout results:
 | Decision Tree | 380.0 | 544.3 | 1.20% |
 | Random Forest | **297.4** | **415.3** | **0.94%** |
 
-These are the weather-enabled default run's initial single-holdout results, not final
-model-selection estimates. Time-series cross-validation and tuning remain roadmap items.
+These are the original weather-enabled benchmark results. Cross-validation and tuning are now
+complete. The newer horizon experiment expands the tree search and reports 371.7 MW one-hour
+Decision Tree MAE; the Random Forest result remains 297.4 MW.
 
 ## Run the final experiment
 
@@ -193,12 +199,21 @@ models.
 
 ## Modeling rules
 
+Run `energy-horizons` after building weather features to reproduce the 1-hour, 1-day, and 1-week
+point forecasts, purged validation, permutation importance, and feature reconstruction rankings.
+This is a long training job; committed tables and figures support review without retraining.
+Weather reduces Random Forest MAE by 2.67% at one hour and 1.71% at one day, with no useful
+weekly improvement. See the final report for evaluation limitations and corrected NNMF results.
+
 This is time-series data, so rows must never be randomly shuffled across train and test periods.
 Lag and rolling features use prior observations only. Model comparisons use the same chronological
 holdout and feature matrix to keep results directly comparable.
 
-## Roadmap
+## Submission status
 
-- Add an exploratory notebook with hourly, weekly, seasonal, and holiday visualizations.
-- Choose the forecast horizon (next hour, next day) and how weather is provided for it.
-- Produce final comparison figures, report, and presentation.
+The implemented analyses, final report, and five-slide presentation are prepared for team review.
+Confirm the instructor's final submission format and deadline, rehearse the speaker notes, and
+submit through the course system. No course submission has been made by this repository workflow.
+
+Future research extensions include target-time calendar features, forecast weather inputs, and a
+new independent evaluation period. These are documented limitations rather than completed work.
