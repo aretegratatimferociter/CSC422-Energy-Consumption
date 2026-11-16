@@ -21,6 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
+report = ["python-docx>=1.1"]
 
 [project.scripts]
 energy-forecast = "energy_forecasting.cli:main"
