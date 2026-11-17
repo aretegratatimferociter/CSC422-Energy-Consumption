@@ -100,4 +100,4 @@ The current verification run passed 40 tests and Ruff. It produced NNMF converge
 5. Reconstruction and predictive rankings: reports/horizons/feature_rank_side_by_side.csv and rank_agreement.csv.
 6. Corrected daily-profile NNMF: reports/nnmf/hour/nnmf_summary.csv.
 
-Final deck: https://docs.google.com/presentation/d/1G8gHuEEzzCfA9qqNX6xhGup07aBLsyYSOagQm47aPeo/edit
+Final deck: https://docs.google.com/presentation/d/1NYYuDm3RbkNt6tLISEEJe-H_dGflHHpI/edit
